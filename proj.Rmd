@@ -1,0 +1,104 @@
+---
+title: "Machine Learning Algorithm"
+author: "MSK"
+date: "Saturday, November 21, 2015"
+output: html_document
+---
+
+The goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+
+#Preprocessing
+```{r,echo=FALSE}
+library(caret)
+library(e1071)
+```
+
+Data is obtained from csv files.
+```{r,echo=FALSE}
+data <- read.csv("pml-training.csv",stringsAsFactors=FALSE,na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv("pml-testing.csv",stringsAsFactors=FALSE,na.strings=c("NA","#DIV/0!",""))
+```
+
+Training data contains entries with NA and NaNs. To deal with this problem, and removing NAs from data set, simple solution was used.
+Firstly,first 7 columns were removed from data set due to obsolence of this data: 
+```{r}
+training <- data[,8:160]
+testing <- testing[,8:160]
+names(testing) <- names(training)
+```
+
+Then, the data columns with missing values vere remowed from both training and testing data sets:
+```{r}
+a <- length(na.omit(training[,1]))
+for (i in 2:ncol(training)) {
+  a <- rbind(a,length(na.omit(training[,i])))
+}
+testing <- testing[,a != 0]
+training <- training[,a != 0]
+a <- length(na.omit(testing[,1]))
+for (i in 2:ncol(testing)) {
+  a <- rbind(a,length(na.omit(testing[,i])))
+}
+testing <- testing[,a != 0]
+training <- training[,a != 0]
+```
+
+Finally, all rows with missing values were removed:
+```{r}
+testing <- na.omit(testing)
+training <- na.omit(training)
+```
+
+Data contains values obtained from various accelerometers like x,y,z coordinates. Such values might be correlated, and such correlation might indicate that few additional variables can be removed from data set. In this case Near Zero Variance is checked:
+```{r}
+nzv <- nearZeroVar(training,saveMetrics = TRUE)
+nzv
+```
+
+All variables with near zero variance are removed from training and testing data set:
+```{r}
+training <- training[,nzv$nzv==FALSE]
+testing <- testing[,nzv$nzv==FALSE]
+```
+```{r}
+remove(nzv,a,i,data)
+```
+
+#Machine learning
+
+Since training and testing data set is prepared, machine learning subroutine can be implemented.
+
+In this case, Random Forest method will be used with 6 fold cross validation technique:
+```{r}
+ctrl <- trainControl(method="cv", number=6)
+```
+
+To fit the model, number of 50 random trees was assigned. Such approach saves computational power and time and is enough accurte. Additioanl implemented parameter was "mtry" which is a number of variables used for prediction. In this case it is 5:
+```{r}
+modFit <- train(classe~., method="rf", ntree=50, data=training,
+                do.trace=50, trControl=ctrl,
+                tuneGrid = data.frame(mtry = 5))
+modFit
+```
+
+Prediction:
+```{r}
+pred <- predict(modFit,training)
+qplot(training$classe,pred,data=training)
+```
+
+#Accuracy of model
+Confusion matrix will simply show how accuretely the model is based on training data:
+```{r}
+confusionMatrix(training$classe,pred)
+```
+
+#Prediction
+```{r}
+predT <- predict(modFit,testing)
+qplot(classe,predT,data=testing)
+summary(predT)
+```
+
